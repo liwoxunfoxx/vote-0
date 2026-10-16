@@ -3,10 +3,13 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>雲端即時投票站</title>
+  <title>雲端即時同步投票系統</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <!-- Firebase SDKs -->
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
   <style>
     body { font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif; }
     .hero-gradient { background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 50%, #d946ef 100%); }
@@ -21,16 +24,11 @@
         <div class="w-9 h-9 rounded-xl bg-indigo-600 text-white flex items-center justify-center font-bold shadow-md shadow-indigo-100">
           <i class="fa-solid fa-check-to-slot"></i>
         </div>
-        <span class="font-extrabold text-lg tracking-tight bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">LIVE POLL</span>
+        <span class="font-extrabold text-lg tracking-tight bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">REALTIME POLL</span>
       </div>
-      <div class="flex items-center gap-3">
-        <button onclick="fetchPolls()" class="text-slate-500 hover:text-indigo-600 p-2 text-sm font-semibold flex items-center gap-1" title="整理最新票數">
-          <i class="fa-solid fa-rotate"></i> 重新整理
-        </button>
-        <button onclick="openCreateModal()" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-sm px-4 py-2 rounded-xl shadow-md shadow-indigo-100 transition flex items-center gap-2">
-          <i class="fa-solid fa-plus text-xs"></i> 發起投票
-        </button>
-      </div>
+      <button onclick="openCreateModal()" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-sm px-4 py-2 rounded-xl shadow-md shadow-indigo-100 transition flex items-center gap-2">
+        <i class="fa-solid fa-plus text-xs"></i> 發起新投票
+      </button>
     </div>
   </nav>
 
@@ -38,14 +36,14 @@
   <header class="hero-gradient text-white py-12 px-6 mb-8 shadow-lg">
     <div class="max-w-5xl mx-auto flex flex-col md:flex-row justify-between items-center gap-6">
       <div class="space-y-2 text-center md:text-left">
-        <span class="inline-block bg-white/20 backdrop-blur-md px-3 py-1 rounded-full text-xs font-bold tracking-wide uppercase">🌐 全球雲端即時同步</span>
-        <h1 class="text-3xl font-black tracking-tight">雲端線上互動投票站</h1>
-        <p class="text-indigo-100 text-sm opacity-90">支援多選/單選、實名匿名、截止時間設定與即時統計分析！</p>
+        <span class="inline-block bg-white/20 backdrop-blur-md px-3 py-1 rounded-full text-xs font-bold tracking-wide uppercase">⚡ 所有人即時同步投票</span>
+        <h1 class="text-3xl font-black tracking-tight">雲端即時互動投票</h1>
+        <p class="text-indigo-100 text-sm opacity-90">任何人點開這個網址，都能看到彼此發起的投票與最新票數！</p>
       </div>
       <div class="flex gap-4 bg-white/10 backdrop-blur-md p-4 rounded-2xl border border-white/20">
         <div class="text-center px-4 border-r border-white/10">
           <div id="statTotalPolls" class="text-2xl font-black">0</div>
-          <div class="text-xs text-indigo-100 font-medium">投票總數</div>
+          <div class="text-xs text-indigo-100 font-medium">總投票數</div>
         </div>
         <div class="text-center px-4">
           <div id="statTotalVotes" class="text-2xl font-black">0</div>
@@ -58,9 +56,9 @@
   <!-- 主要內容區 -->
   <main class="max-w-5xl mx-auto px-6">
     <div id="pollList" class="space-y-6">
-      <div class="text-center py-12 text-slate-400">
-        <i class="fa-solid fa-spinner fa-spin text-2xl mb-2"></i>
-        <p class="text-sm">連線雲端資料庫中...</p>
+      <div class="text-center py-16 text-slate-400">
+        <i class="fa-solid fa-spinner fa-spin text-3xl mb-3 text-indigo-500"></i>
+        <p class="text-sm font-semibold">正在連線雲端資料庫...</p>
       </div>
     </div>
   </main>
@@ -69,7 +67,7 @@
   <div id="createModal" class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm hidden items-center justify-center p-4 z-50">
     <div class="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
       <div class="flex justify-between items-center mb-6 border-b pb-4">
-        <h3 class="text-lg font-bold text-slate-800">建立全新投票</h3>
+        <h3 class="text-lg font-bold text-slate-800">建立雲端投票</h3>
         <button onclick="closeCreateModal()" class="w-8 h-8 rounded-full bg-slate-100 text-slate-400 hover:text-slate-600 flex items-center justify-center">
           <i class="fa-solid fa-xmark"></i>
         </button>
@@ -78,7 +76,7 @@
       <form id="pollForm" onsubmit="handleCreatePoll(event)" class="space-y-4">
         <div>
           <label class="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1">投票主題 *</label>
-          <input type="text" id="pollTitle" required placeholder="例：本週實況選歌 / 週末遊戲選題" class="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none text-sm">
+          <input type="text" id="pollTitle" required placeholder="例如：本週實況選歌 / 週末遊戲選題" class="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none text-sm">
         </div>
 
         <div>
@@ -118,60 +116,28 @@
 
         <div class="flex justify-end gap-3 pt-4 border-t">
           <button type="button" onclick="closeCreateModal()" class="px-5 py-2.5 text-xs font-bold text-slate-500 hover:bg-slate-100 rounded-xl">取消</button>
-          <button type="submit" id="submitBtn" class="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow-md shadow-indigo-100">雲端發佈投票</button>
+          <button type="submit" class="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow-md shadow-indigo-100">發佈至雲端</button>
         </div>
       </form>
     </div>
   </div>
 
   <script>
-    // 使用公共免費雲端儲存 JSONBin
-    const API_BIN_ID = '6605a9ee1522f32371510123'; // 免費共享測試 Bin
-    const API_URL = `https://api.jsonbin.io/v3/b/660a927a1522f323715f3e23`;
-    
-    let polls = [];
+    // 初始化共用 Firebase 資料庫連線
+    const firebaseConfig = {
+      databaseURL: "https://voter-app-public-default-rtdb.firebaseio.com/"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
+
+    let pollsData = {};
     let optionCount = 0;
 
-    // 從雲端獲取最新投票資料
-    async function fetchPolls() {
-      const container = document.getElementById('pollList');
-      try {
-        const res = await fetch('https://api.jsonbin.io/v3/b/660a927a1522f323715f3e23/latest', {
-          headers: { 'X-Master-Key': '$2a$10$v0S6CqC0H6C9Vp.h3GgCZuL4X.8YJ.g0H.h2l6B3v5s4O6P7Q8R9S' }
-        });
-        if (res.ok) {
-          const data = await res.json();
-          polls = data.record.polls || [];
-          renderPolls();
-        } else {
-          fallbackLocalStore();
-        }
-      } catch (err) {
-        fallbackLocalStore();
-      }
-    }
-
-    function fallbackLocalStore() {
-      polls = JSON.parse(localStorage.getItem('my_cloud_polls')) || [];
+    // 即時監聽雲端資料庫變更（其他人投票或新增，畫面會秒級同步）
+    db.ref('polls').on('value', (snapshot) => {
+      pollsData = snapshot.val() || {};
       renderPolls();
-    }
-
-    async function syncToCloud() {
-      localStorage.setItem('my_cloud_polls', JSON.stringify(polls));
-      renderPolls();
-      try {
-        await fetch('https://api.jsonbin.io/v3/b/660a927a1522f323715f3e23', {
-          method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-Master-Key': '$2a$10$v0S6CqC0H6C9Vp.h3GgCZuL4X.8YJ.g0H.h2l6B3v5s4O6P7Q8R9S'
-          },
-          body: JSON.stringify({ polls })
-        });
-      } catch (err) {
-        console.log('雲端同步備用狀態');
-      }
-    }
+    });
 
     function openCreateModal() {
       document.getElementById('createModal').classList.remove('hidden');
@@ -235,7 +201,7 @@
       }
     }
 
-    async function handleCreatePoll(e) {
+    function handleCreatePoll(e) {
       e.preventDefault();
       const title = document.getElementById('pollTitle').value;
       const desc = document.getElementById('pollDesc').value;
@@ -251,7 +217,7 @@
         const image = row.querySelector('.option-img-data').value;
         if (text) {
           options.push({
-            id: `opt-${Date.now()}-${idx}`,
+            id: `opt-${idx}`,
             text: text,
             image: image || '',
             votes: 0,
@@ -260,8 +226,9 @@
         }
       });
 
-      polls.unshift({
-        id: `poll-${Date.now()}`,
+      const pollId = 'poll-' + Date.now();
+      db.ref('polls/' + pollId).set({
+        id: pollId,
         title,
         desc,
         deadline,
@@ -271,17 +238,15 @@
       });
 
       closeCreateModal();
-      await syncToCloud();
       document.getElementById('pollForm').reset();
     }
 
-    async function castVote(pollId) {
-      const poll = polls.find(p => p.id === pollId);
+    function castVote(pollId) {
+      const poll = pollsData[pollId];
       if (!poll) return;
 
-      // 檢查是否逾期
       if (new Date(poll.deadline) < new Date()) {
-        alert('此投票已過截止時間，停止接收新投票！');
+        alert('此投票已過截止時間！');
         return;
       }
 
@@ -294,43 +259,51 @@
       const inputs = document.querySelectorAll(`input[name="poll-${pollId}"]:checked`);
       if (inputs.length === 0) return alert('請先勾選選項！');
 
+      // 更新對應選項票數
+      let updatedOptions = [...poll.options];
       inputs.forEach(input => {
-        const opt = poll.options.find(o => o.id === input.value);
-        if (opt) {
-          opt.votes += 1;
-          if (!poll.isAnonymous && voterName) opt.voters.push(voterName.trim());
+        const optIndex = updatedOptions.findIndex(o => o.id === input.value);
+        if (optIndex !== -1) {
+          updatedOptions[optIndex].votes = (updatedOptions[optIndex].votes || 0) + 1;
+          if (!poll.isAnonymous && voterName) {
+            if (!updatedOptions[optIndex].voters) updatedOptions[optIndex].voters = [];
+            updatedOptions[optIndex].voters.push(voterName.trim());
+          }
         }
       });
 
-      await syncToCloud();
-      alert('投票成功並已同步至雲端！');
+      // 寫回 Firebase 雲端
+      db.ref(`polls/${pollId}/options`).set(updatedOptions);
+      alert('投票成功，已即時同步至雲端！');
     }
 
     function renderPolls() {
       const container = document.getElementById('pollList');
       container.innerHTML = '';
 
-      let totalVotesCount = 0;
-      document.getElementById('statTotalPolls').textContent = polls.length;
+      const pollKeys = Object.keys(pollsData).reverse();
+      document.getElementById('statTotalPolls').textContent = pollKeys.length;
 
-      if (polls.length === 0) {
+      if (pollKeys.length === 0) {
         container.innerHTML = `
           <div class="bg-white rounded-3xl p-12 text-center border border-slate-100 shadow-sm space-y-4">
             <div class="w-16 h-16 bg-indigo-50 text-indigo-500 rounded-2xl flex items-center justify-center mx-auto text-2xl">
               <i class="fa-solid fa-square-poll-vertical"></i>
             </div>
-            <h3 class="text-base font-bold text-slate-700">目前沒有任何投票專案</h3>
-            <p class="text-xs text-slate-400">點擊右上角的「發起投票」，建立您的第一個全網同步民調！</p>
+            <h3 class="text-base font-bold text-slate-700">目前沒有任何雲端投票</h3>
+            <p class="text-xs text-slate-400">點擊右上角的「發起新投票」，讓其他人也能同步看到與參與！</p>
           </div>
         `;
         document.getElementById('statTotalVotes').textContent = '0';
         return;
       }
 
+      let totalVotesCount = 0;
       const now = new Date();
 
-      polls.forEach(poll => {
-        const totalVotes = poll.options.reduce((sum, o) => sum + o.votes, 0);
+      pollKeys.forEach(key => {
+        const poll = pollsData[key];
+        const totalVotes = poll.options.reduce((sum, o) => sum + (o.votes || 0), 0);
         totalVotesCount += totalVotes;
 
         const isExpired = new Date(poll.deadline) < now;
@@ -338,7 +311,8 @@
 
         let optionsHtml = '';
         poll.options.forEach(opt => {
-          const percent = totalVotes === 0 ? 0 : Math.round((opt.votes / totalVotes) * 100);
+          const optVotes = opt.votes || 0;
+          const percent = totalVotes === 0 ? 0 : Math.round((optVotes / totalVotes) * 100);
           const inputType = poll.isMultiple ? 'checkbox' : 'radio';
 
           optionsHtml += `
@@ -350,12 +324,12 @@
                   <div class="flex-1">
                     <div class="flex justify-between text-xs font-semibold text-slate-700 mb-1">
                       <span>${opt.text}</span>
-                      <span class="text-indigo-600 font-bold">${opt.votes} 票 (${percent}%)</span>
+                      <span class="text-indigo-600 font-bold">${optVotes} 票 (${percent}%)</span>
                     </div>
                     <div class="w-full bg-slate-200/60 rounded-full h-1.5 overflow-hidden">
                       <div class="bg-indigo-600 h-1.5 rounded-full transition-all duration-500" style="width: ${percent}%"></div>
                     </div>
-                    ${!poll.isAnonymous && opt.voters.length > 0 ? `<div class="text-[10px] text-slate-400 mt-1">投票者: ${opt.voters.join(', ')}</div>` : ''}
+                    ${!poll.isAnonymous && opt.voters && opt.voters.length > 0 ? `<div class="text-[10px] text-slate-400 mt-1">投票者: ${opt.voters.join(', ')}</div>` : ''}
                   </div>
                 </div>
               </div>
@@ -402,9 +376,6 @@
 
       document.getElementById('statTotalVotes').textContent = totalVotesCount;
     }
-
-    // 初始化讀取雲端資料
-    fetchPolls();
   </script>
 </body>
 </html>
