@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>雲端即時投票站</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    body { font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif; }
+    .hero-gradient { background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 50%, #d946ef 100%); }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen pb-16">
+
+  <!-- 導覽列 -->
+  <nav class="bg-white/90 backdrop-blur-md border-b border-slate-200 sticky top-0 z-40">
+    <div class="max-w-5xl mx-auto px-6 h-16 flex justify-between items-center">
+      <div class="flex items-center gap-3">
+        <div class="w-9 h-9 rounded-xl bg-indigo-600 text-white flex items-center justify-center font-bold shadow-md shadow-indigo-100">
+          <i class="fa-solid fa-check-to-slot"></i>
+        </div>
+        <span class="font-extrabold text-lg tracking-tight bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">LIVE POLL</span>
+      </div>
+      <div class="flex items-center gap-3">
+        <button onclick="fetchPolls()" class="text-slate-500 hover:text-indigo-600 p-2 text-sm font-semibold flex items-center gap-1" title="整理最新票數">
+          <i class="fa-solid fa-rotate"></i> 重新整理
+        </button>
+        <button onclick="openCreateModal()" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-sm px-4 py-2 rounded-xl shadow-md shadow-indigo-100 transition flex items-center gap-2">
+          <i class="fa-solid fa-plus text-xs"></i> 發起投票
+        </button>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Banner -->
+  <header class="hero-gradient text-white py-12 px-6 mb-8 shadow-lg">
+    <div class="max-w-5xl mx-auto flex flex-col md:flex-row justify-between items-center gap-6">
+      <div class="space-y-2 text-center md:text-left">
+        <span class="inline-block bg-white/20 backdrop-blur-md px-3 py-1 rounded-full text-xs font-bold tracking-wide uppercase">🌐 全球雲端即時同步</span>
+        <h1 class="text-3xl font-black tracking-tight">雲端線上互動投票站</h1>
+        <p class="text-indigo-100 text-sm opacity-90">支援多選/單選、實名匿名、截止時間設定與即時統計分析！</p>
+      </div>
+      <div class="flex gap-4 bg-white/10 backdrop-blur-md p-4 rounded-2xl border border-white/20">
+        <div class="text-center px-4 border-r border-white/10">
+          <div id="statTotalPolls" class="text-2xl font-black">0</div>
+          <div class="text-xs text-indigo-100 font-medium">投票總數</div>
+        </div>
+        <div class="text-center px-4">
+          <div id="statTotalVotes" class="text-2xl font-black">0</div>
+          <div class="text-xs text-indigo-100 font-medium">累積總票數</div>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- 主要內容區 -->
+  <main class="max-w-5xl mx-auto px-6">
+    <div id="pollList" class="space-y-6">
+      <div class="text-center py-12 text-slate-400">
+        <i class="fa-solid fa-spinner fa-spin text-2xl mb-2"></i>
+        <p class="text-sm">連線雲端資料庫中...</p>
+      </div>
+    </div>
+  </main>
+
+  <!-- 發起投票 Modal -->
+  <div id="createModal" class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm hidden items-center justify-center p-4 z-50">
+    <div class="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
+      <div class="flex justify-between items-center mb-6 border-b pb-4">
+        <h3 class="text-lg font-bold text-slate-800">建立全新投票</h3>
+        <button onclick="closeCreateModal()" class="w-8 h-8 rounded-full bg-slate-100 text-slate-400 hover:text-slate-600 flex items-center justify-center">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+
+      <form id="pollForm" onsubmit="handleCreatePoll(event)" class="space-y-4">
+        <div>
+          <label class="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1">投票主題 *</label>
+          <input type="text" id="pollTitle" required placeholder="例：本週實況選歌 / 週末遊戲選題" class="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none text-sm">
+        </div>
+
+        <div>
+          <label class="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1">補充說明 (選填)</label>
+          <textarea id="pollDesc" rows="2" placeholder="詳細規則或注意事項..." class="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none text-sm"></textarea>
+        </div>
+
+        <div>
+          <label class="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1">⏰ 投票截止時間 *</label>
+          <input type="datetime-local" id="pollDeadline" required class="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none text-sm">
+        </div>
+
+        <div class="grid grid-cols-2 gap-3 bg-slate-50 p-3 rounded-2xl border border-slate-100">
+          <div>
+            <label class="block text-xs font-semibold text-slate-500 mb-1">選擇模式</label>
+            <select id="pollMultiple" class="w-full text-xs font-medium p-2 border rounded-lg bg-white">
+              <option value="false">單選模式</option>
+              <option value="true">多選模式</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-500 mb-1">身份驗證</label>
+            <select id="pollAnonymous" class="w-full text-xs font-medium p-2 border rounded-lg bg-white">
+              <option value="true">開啟匿名</option>
+              <option value="false">實名填名</option>
+            </select>
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-2">選項列表</label>
+          <div id="optionsContainer" class="space-y-3"></div>
+          <button type="button" onclick="addOptionInput()" class="mt-3 text-xs font-bold text-indigo-600 hover:text-indigo-800 flex items-center gap-1.5">
+            <i class="fa-solid fa-plus-circle"></i> 新增選項
+          </button>
+        </div>
+
+        <div class="flex justify-end gap-3 pt-4 border-t">
+          <button type="button" onclick="closeCreateModal()" class="px-5 py-2.5 text-xs font-bold text-slate-500 hover:bg-slate-100 rounded-xl">取消</button>
+          <button type="submit" id="submitBtn" class="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow-md shadow-indigo-100">雲端發佈投票</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    // 先到 Supabase 專案設定頁，填入 Project URL 與 publishable/anon key。
+    // 只能使用 publishable/anon key；絕不可放 service_role / secret key。
+    const SUPABASE_URL = '在這裡填入你的_Supabase_Project_URL';
+    const SUPABASE_ANON_KEY = '在這裡填入你的_Supabase_publishable_或_anon_key';
+
+    let polls = [];
+    let optionCount = 0;
+    let pollChannel = null;
+    let isLoadingPolls = false;
+
+    function getSupabase() {
+      if (!window.supabase) throw new Error('Supabase SDK 載入失敗，請檢查網路或 CDN。');
+      if (SUPABASE_URL.includes('在這裡填入') || SUPABASE_ANON_KEY.includes('在這裡填入')) {
+        throw new Error('尚未設定 Supabase URL 與 publishable/anon key。');
+      }
+      if (!window._pollSupabase) window._pollSupabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+      return window._pollSupabase;
+    }
+
+    function showConnectionError(message) {
+      const container = document.getElementById('pollList');
+      container.innerHTML = `<div class="bg-white rounded-3xl p-8 text-center border border-rose-100 shadow-sm space-y-3"><div class="text-rose-500 text-2xl"><i class="fa-solid fa-triangle-exclamation"></i></div><h3 class="font-bold text-slate-700">雲端連線失敗</h3><p class="text-sm text-slate-500">${escapeHtml(message)}</p><p class="text-xs text-slate-400">請確認 Supabase 設定、SQL 資料表與網路連線。為避免資料分裂，連線失敗時不會改用本機資料。</p><button onclick="fetchPolls()" class="bg-indigo-600 text-white rounded-xl px-4 py-2 text-sm font-bold">重新連線</button></div>`;
+    }
+
+    function escapeHtml(value) {
+      return String(value ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+    }
+
+    async function fetchPolls() {
+      if (isLoadingPolls) return;
+      isLoadingPolls = true;
+      try {
+        const client = getSupabase();
+        const { data, error } = await client.from('polls').select('data, created_at').order('created_at', { ascending: false });
+        if (error) throw error;
+        polls = (data || []).map(row => row.data).filter(Boolean);
+        renderPolls();
+        setupRealtime();
+      } catch (err) {
+        console.error('讀取雲端投票失敗：', err);
+        showConnectionError(err.message || '未知錯誤');
+      } finally {
+        isLoadingPolls = false;
+      }
+    }
+
+    function setupRealtime() {
+      try {
+        const client = getSupabase();
+        if (pollChannel) return;
+        pollChannel = client.channel('public-polls-live')
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'polls' }, () => fetchPolls())
+          .subscribe(status => {
+            if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') console.warn('即時同步連線狀態：', status);
+          });
+      } catch (err) { console.error(err); }
+    }
+
+    function getVoterToken() {
+      let token = localStorage.getItem('poll_voter_token');
+      if (!token) {
+        token = (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : 'voter-' + Date.now() + '-' + Math.random().toString(36).slice(2);
+        localStorage.setItem('poll_voter_token', token);
+      }
+      return token;
+    }
+
+    async function createPollInCloud(poll) {
+      const { error } = await getSupabase().rpc('create_poll', { p_poll: poll });
+      if (error) throw error;
+    }
+
+    async function openCreateModal() {
+      document.getElementById('createModal').classList.remove('hidden');
+      document.getElementById('createModal').classList.add('flex');
+      document.getElementById('optionsContainer').innerHTML = '';
+      optionCount = 0;
+      addOptionInput();
+      addOptionInput();
+      const now = new Date();
+      now.setDate(now.getDate() + 1);
+      const localDate = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+      document.getElementById('pollDeadline').value = localDate;
+    }
+
+    function closeCreateModal() {
+      document.getElementById('createModal').classList.add('hidden');
+      document.getElementById('createModal').classList.remove('flex');
+    }
+
+    function addOptionInput() {
+      optionCount++;
+      const id = optionCount;
+      const div = document.createElement('div');
+      div.className = 'p-3 border border-slate-200 rounded-xl bg-slate-50 space-y-2';
+      div.id = `option-row-${id}`;
+      div.innerHTML = `
+        <div class="flex items-center gap-2">
+          <input type="text" class="option-text flex-1 px-3 py-1.5 text-xs border rounded-lg bg-white outline-none focus:ring-1 focus:ring-indigo-500" placeholder="選項 ${id}" required>
+          <button type="button" onclick="removeOptionInput(${id})" class="text-slate-400 hover:text-rose-500 p-1"><i class="fa-solid fa-trash-can text-xs"></i></button>
+        </div>
+        <div class="flex items-center gap-2 text-xs text-slate-400">
+          <i class="fa-regular fa-image"></i>
+          <label class="cursor-pointer text-indigo-600 font-semibold hover:underline">圖片 (選填)<input type="file" accept="image/*" class="hidden" onchange="handleImageUpload(event, ${id})"></label>
+          <span id="img-preview-name-${id}" class="truncate max-w-[150px]"></span>
+        </div>
+        <input type="hidden" class="option-img-data" id="img-data-${id}">
+      `;
+      document.getElementById('optionsContainer').appendChild(div);
+    }
+
+    function removeOptionInput(id) {
+      const row = document.getElementById(`option-row-${id}`);
+      if (document.querySelectorAll('#optionsContainer > div').length > 2) row.remove();
+    }
+
+    function handleImageUpload(e, id) {
+      const file = e.target.files[0];
+      if (!file) return;
+      if (file.size > 700 * 1024) {
+        alert('圖片請控制在 700 KB 以內，避免雲端資料過大。');
+        e.target.value = '';
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = evt => {
+        document.getElementById(`img-data-${id}`).value = evt.target.result;
+        document.getElementById(`img-preview-name-${id}`).textContent = file.name;
+      };
+      reader.readAsDataURL(file);
+    }
+
+    async function handleCreatePoll(e) {
+      e.preventDefault();
+      const submitBtn = document.getElementById('submitBtn');
+      submitBtn.disabled = true;
+      submitBtn.textContent = '正在發佈…';
+      try {
+        const title = document.getElementById('pollTitle').value.trim();
+        const desc = document.getElementById('pollDesc').value.trim();
+        const deadline = new Date(document.getElementById('pollDeadline').value).toISOString();
+        const isMultiple = document.getElementById('pollMultiple').value === 'true';
+        const isAnonymous = document.getElementById('pollAnonymous').value === 'true';
+        const options = [];
+        document.querySelectorAll('#optionsContainer > div').forEach((row, idx) => {
+          const text = row.querySelector('.option-text').value.trim();
+          const image = row.querySelector('.option-img-data').value;
+          if (text) options.push({ id: `opt-${Date.now()}-${idx}`, text, image: image || '', votes: 0, voters: [] });
+        });
+        if (options.length < 2) throw new Error('至少需要兩個有效選項。');
+        const poll = { id: `poll-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, title, desc, deadline, isMultiple, isAnonymous, options, votedTokens: [] };
+        await createPollInCloud(poll);
+        closeCreateModal();
+        document.getElementById('pollForm').reset();
+        await fetchPolls();
+        alert('投票已成功發佈到雲端！');
+      } catch (err) {
+        console.error(err);
+        alert('發佈失敗：' + (err.message || '請檢查雲端設定。'));
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.textContent = '雲端發佈投票';
+      }
+    }
+
+    async function castVote(pollId) {
+      const poll = polls.find(p => p.id === pollId);
+      if (!poll) return;
+      if (new Date(poll.deadline) < new Date()) return alert('此投票已過截止時間，停止接收新投票！');
+      let voterName = '';
+      if (!poll.isAnonymous) {
+        voterName = prompt('本投票為實名制，請輸入您的姓名/暱稱：');
+        if (!voterName || !voterName.trim()) return;
+        voterName = voterName.trim();
+      }
+      const inputs = document.querySelectorAll(`input[name="poll-${pollId}"]:checked`);
+      const optionIds = Array.from(inputs).map(input => input.value);
+      if (!optionIds.length) return alert('請先勾選選項！');
+      if (!poll.isMultiple && optionIds.length > 1) return alert('此投票只能選擇一個選項。');
+      try {
+        const { error } = await getSupabase().rpc('cast_vote', {
+          p_poll_id: pollId,
+          p_option_ids: optionIds,
+          p_voter_name: voterName || null,
+          p_voter_token: getVoterToken()
+        });
+        if (error) throw error;
+        await fetchPolls();
+        alert('投票成功！票數已同步至雲端。');
+      } catch (err) {
+        console.error(err);
+        alert('投票失敗：' + (err.message || '請檢查雲端連線。'));
+      }
+    }
+
+    function renderPolls() {
+      const container = document.getElementById('pollList');
+      container.innerHTML = '';
+      let totalVotesCount = 0;
+      document.getElementById('statTotalPolls').textContent = polls.length;
+      if (polls.length === 0) {
+        container.innerHTML = `<div class="bg-white rounded-3xl p-12 text-center border border-slate-100 shadow-sm space-y-4"><div class="w-16 h-16 bg-indigo-50 text-indigo-500 rounded-2xl flex items-center justify-center mx-auto text-2xl"><i class="fa-solid fa-square-poll-vertical"></i></div><h3 class="text-base font-bold text-slate-700">目前沒有任何投票專案</h3><p class="text-xs text-slate-400">點擊右上角的「發起投票」，建立您的第一個全網同步民調！</p></div>`;
+        document.getElementById('statTotalVotes').textContent = '0';
+        return;
+      }
+      const now = new Date();
+      polls.forEach(poll => {
+        const totalVotes = poll.options.reduce((sum, o) => sum + Number(o.votes || 0), 0);
+        totalVotesCount += totalVotes;
+        const isExpired = new Date(poll.deadline) < now;
+        const deadlineStr = new Date(poll.deadline).toLocaleString('zh-TW', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+        let optionsHtml = '';
+        poll.options.forEach(opt => {
+          const percent = totalVotes === 0 ? 0 : Math.round((Number(opt.votes || 0) / totalVotes) * 100);
+          const inputType = poll.isMultiple ? 'checkbox' : 'radio';
+          optionsHtml += `<label class="block cursor-pointer group"><div class="p-3.5 rounded-2xl border border-slate-100 bg-slate-50/50 group-hover:bg-white transition space-y-2"><div class="flex items-center gap-3"><input type="${inputType}" name="poll-${escapeHtml(poll.id)}" value="${escapeHtml(opt.id)}" ${isExpired ? 'disabled' : ''} class="w-4 h-4 text-indigo-600 focus:ring-indigo-500 disabled:opacity-50">${opt.image ? `<img src="${opt.image}" class="w-10 h-10 object-cover rounded-lg border">` : ''}<div class="flex-1"><div class="flex justify-between text-xs font-semibold text-slate-700 mb-1"><span>${escapeHtml(opt.text)}</span><span class="text-indigo-600 font-bold">${Number(opt.votes || 0)} 票 (${percent}%)</span></div><div class="w-full bg-slate-200/60 rounded-full h-1.5 overflow-hidden"><div class="bg-indigo-600 h-1.5 rounded-full transition-all duration-500" style="width: ${percent}%"></div></div>${!poll.isAnonymous && opt.voters && opt.voters.length ? `<div class="text-[10px] text-slate-400 mt-1">投票者: ${opt.voters.map(escapeHtml).join(', ')}</div>` : ''}</div></div></div></label>`;
+        });
+        const card = document.createElement('div');
+        card.className = 'bg-white rounded-3xl p-6 border border-slate-100 shadow-sm space-y-4';
+        card.innerHTML = `<div class="flex justify-between items-start"><div class="space-y-1"><div class="flex items-center gap-2 flex-wrap"><span class="px-2.5 py-0.5 text-[10px] font-bold rounded-md ${poll.isMultiple ? 'bg-purple-50 text-purple-600' : 'bg-blue-50 text-blue-600'}">${poll.isMultiple ? '多選' : '單選'}</span><span class="px-2.5 py-0.5 text-[10px] font-bold rounded-md ${poll.isAnonymous ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600'}">${poll.isAnonymous ? '匿名' : '實名'}</span><span class="px-2.5 py-0.5 text-[10px] font-bold rounded-md ${isExpired ? 'bg-rose-50 text-rose-600' : 'bg-indigo-50 text-indigo-600'}">${isExpired ? '已截止' : '進行中'}</span></div><h3 class="text-base font-extrabold text-slate-800">${escapeHtml(poll.title)}</h3>${poll.desc ? `<p class="text-xs text-slate-400">${escapeHtml(poll.desc)}</p>` : ''}</div><div class="text-right shrink-0 ml-3"><div class="text-xs font-bold text-slate-400">總票數 ${totalVotes}</div><div class="text-[10px] text-slate-400 mt-1"><i class="fa-regular fa-clock"></i> 截止: ${deadlineStr}</div></div></div><div class="space-y-2">${optionsHtml}</div><div class="pt-2 flex justify-end"><button onclick="castVote('${escapeHtml(poll.id)}')" ${isExpired ? 'disabled' : ''} class="bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-300 text-white font-bold text-xs px-5 py-2.5 rounded-xl shadow-md">${isExpired ? '投票已截止' : '送出投票'}</button></div>`;
+        container.appendChild(card);
+      });
+      document.getElementById('statTotalVotes').textContent = totalVotesCount;
+    }
+
+    fetchPolls();
+  </script>
+</body>
+</html>
