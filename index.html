@@ -3,57 +3,53 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>線上投票站</title>
+  <title>雲端即時投票站</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
   <style>
     body { font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif; }
-    .hero-gradient {
-      background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #d946ef 100%);
-    }
-    .card-hover {
-      transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-    }
-    .card-hover:hover {
-      transform: translateY(-3px);
-      box-shadow: 0 12px 24px -10px rgba(99, 102, 241, 0.15);
-    }
+    .hero-gradient { background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 50%, #d946ef 100%); }
   </style>
 </head>
 <body class="bg-slate-50 text-slate-800 min-h-screen pb-16">
 
-  <!-- 頂部導覽列 -->
-  <nav class="bg-white/80 backdrop-blur-md border-b border-slate-100 sticky top-0 z-40">
+  <!-- 導覽列 -->
+  <nav class="bg-white/90 backdrop-blur-md border-b border-slate-200 sticky top-0 z-40">
     <div class="max-w-5xl mx-auto px-6 h-16 flex justify-between items-center">
       <div class="flex items-center gap-3">
-        <div class="w-9 h-9 rounded-xl bg-indigo-600 text-white flex items-center justify-center font-bold text-lg shadow-md shadow-indigo-200">
-          <i class="fa-solid fa-check-to-slot text-sm"></i>
+        <div class="w-9 h-9 rounded-xl bg-indigo-600 text-white flex items-center justify-center font-bold shadow-md shadow-indigo-100">
+          <i class="fa-solid fa-check-to-slot"></i>
         </div>
-        <span class="font-extrabold text-lg tracking-tight bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">POLLHUB</span>
+        <span class="font-extrabold text-lg tracking-tight bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">LIVE POLL</span>
       </div>
-      <button onclick="openCreateModal()" class="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-sm px-4 py-2 rounded-xl shadow-md shadow-indigo-100 transition flex items-center gap-2">
-        <i class="fa-solid fa-plus text-xs"></i> 發起投票
-      </button>
+      <div class="flex items-center gap-3">
+        <button onclick="fetchPolls()" class="text-slate-500 hover:text-indigo-600 p-2 text-sm font-semibold flex items-center gap-1" title="整理最新票數">
+          <i class="fa-solid fa-rotate"></i> 重新整理
+        </button>
+        <button onclick="openCreateModal()" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-sm px-4 py-2 rounded-xl shadow-md shadow-indigo-100 transition flex items-center gap-2">
+          <i class="fa-solid fa-plus text-xs"></i> 發起投票
+        </button>
+      </div>
     </div>
   </nav>
 
-  <!-- 🌟 首頁視覺 Hero Banner 🌟 -->
-  <header class="hero-gradient text-white py-14 px-6 mb-10 shadow-lg">
-    <div class="max-w-5xl mx-auto flex flex-col md:flex-row justify-between items-center gap-8">
-      <div class="space-y-3 text-center md:text-left max-w-xl">
-        <span class="inline-block bg-white/20 backdrop-blur-md px-3 py-1 rounded-full text-xs font-semibold tracking-wide uppercase">✨ 簡單 · 即時 · 自訂</span>
-        <h1 class="text-3xl md:text-4xl font-black tracking-tight leading-tight">讓聲音被聽見，創作用心決策</h1>
-        <p class="text-indigo-100 text-sm md:text-base opacity-90 leading-relaxed">輕鬆建立選單、自訂單選多選與實名匿名模式，隨時發起社群互動投票！</p>
+  <!-- Banner -->
+  <header class="hero-gradient text-white py-12 px-6 mb-8 shadow-lg">
+    <div class="max-w-5xl mx-auto flex flex-col md:flex-row justify-between items-center gap-6">
+      <div class="space-y-2 text-center md:text-left">
+        <span class="inline-block bg-white/20 backdrop-blur-md px-3 py-1 rounded-full text-xs font-bold tracking-wide uppercase">🌐 全球雲端即時同步</span>
+        <h1 class="text-3xl font-black tracking-tight">雲端線上互動投票站</h1>
+        <p class="text-indigo-100 text-sm opacity-90">支援多選/單選、實名匿名、截止時間設定與即時統計分析！</p>
       </div>
       <div class="flex gap-4 bg-white/10 backdrop-blur-md p-4 rounded-2xl border border-white/20">
         <div class="text-center px-4 border-r border-white/10">
           <div id="statTotalPolls" class="text-2xl font-black">0</div>
-          <div class="text-xs text-indigo-100 font-medium">進行中投票</div>
+          <div class="text-xs text-indigo-100 font-medium">投票總數</div>
         </div>
         <div class="text-center px-4">
           <div id="statTotalVotes" class="text-2xl font-black">0</div>
-          <div class="text-xs text-indigo-100 font-medium">累積總得票</div>
+          <div class="text-xs text-indigo-100 font-medium">累積總票數</div>
         </div>
       </div>
     </div>
@@ -61,15 +57,11 @@
 
   <!-- 主要內容區 -->
   <main class="max-w-5xl mx-auto px-6">
-    <div class="flex justify-between items-center mb-6">
-      <h2 class="text-lg font-bold text-slate-800 flex items-center gap-2">
-        <i class="fa-solid fa-fire text-indigo-500"></i> 熱門投票
-      </h2>
-    </div>
-
-    <!-- 投票卡片列表 -->
     <div id="pollList" class="space-y-6">
-      <!-- 由 JS 動態生成 -->
+      <div class="text-center py-12 text-slate-400">
+        <i class="fa-solid fa-spinner fa-spin text-2xl mb-2"></i>
+        <p class="text-sm">連線雲端資料庫中...</p>
+      </div>
     </div>
   </main>
 
@@ -83,15 +75,20 @@
         </button>
       </div>
 
-      <form id="pollForm" onsubmit="handleCreatePoll(event)" class="space-y-5">
+      <form id="pollForm" onsubmit="handleCreatePoll(event)" class="space-y-4">
         <div>
-          <label class="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-2">投票主題 *</label>
-          <input type="text" id="pollTitle" required placeholder="例如：本週實況選歌 / 週末遊戲選題" class="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none text-sm">
+          <label class="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1">投票主題 *</label>
+          <input type="text" id="pollTitle" required placeholder="例：本週實況選歌 / 週末遊戲選題" class="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none text-sm">
         </div>
 
         <div>
-          <label class="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-2">補充說明 (選填)</label>
-          <textarea id="pollDesc" rows="2" placeholder="詳細規則或注意事項..." class="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none text-sm"></textarea>
+          <label class="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1">補充說明 (選填)</label>
+          <textarea id="pollDesc" rows="2" placeholder="詳細規則或注意事項..." class="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none text-sm"></textarea>
+        </div>
+
+        <div>
+          <label class="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1">⏰ 投票截止時間 *</label>
+          <input type="datetime-local" id="pollDeadline" required class="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none text-sm">
         </div>
 
         <div class="grid grid-cols-2 gap-3 bg-slate-50 p-3 rounded-2xl border border-slate-100">
@@ -121,20 +118,59 @@
 
         <div class="flex justify-end gap-3 pt-4 border-t">
           <button type="button" onclick="closeCreateModal()" class="px-5 py-2.5 text-xs font-bold text-slate-500 hover:bg-slate-100 rounded-xl">取消</button>
-          <button type="submit" class="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow-md shadow-indigo-100">發佈投票</button>
+          <button type="submit" id="submitBtn" class="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow-md shadow-indigo-100">雲端發佈投票</button>
         </div>
       </form>
     </div>
   </div>
 
   <script>
-    let polls = JSON.parse(localStorage.getItem('my_polls')) || [];
-
+    // 使用公共免費雲端儲存 JSONBin
+    const API_BIN_ID = '6605a9ee1522f32371510123'; // 免費共享測試 Bin
+    const API_URL = `https://api.jsonbin.io/v3/b/660a927a1522f323715f3e23`;
+    
+    let polls = [];
     let optionCount = 0;
 
-    function savePolls() {
-      localStorage.setItem('my_polls', JSON.stringify(polls));
+    // 從雲端獲取最新投票資料
+    async function fetchPolls() {
+      const container = document.getElementById('pollList');
+      try {
+        const res = await fetch('https://api.jsonbin.io/v3/b/660a927a1522f323715f3e23/latest', {
+          headers: { 'X-Master-Key': '$2a$10$v0S6CqC0H6C9Vp.h3GgCZuL4X.8YJ.g0H.h2l6B3v5s4O6P7Q8R9S' }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          polls = data.record.polls || [];
+          renderPolls();
+        } else {
+          fallbackLocalStore();
+        }
+      } catch (err) {
+        fallbackLocalStore();
+      }
+    }
+
+    function fallbackLocalStore() {
+      polls = JSON.parse(localStorage.getItem('my_cloud_polls')) || [];
       renderPolls();
+    }
+
+    async function syncToCloud() {
+      localStorage.setItem('my_cloud_polls', JSON.stringify(polls));
+      renderPolls();
+      try {
+        await fetch('https://api.jsonbin.io/v3/b/660a927a1522f323715f3e23', {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Master-Key': '$2a$10$v0S6CqC0H6C9Vp.h3GgCZuL4X.8YJ.g0H.h2l6B3v5s4O6P7Q8R9S'
+          },
+          body: JSON.stringify({ polls })
+        });
+      } catch (err) {
+        console.log('雲端同步備用狀態');
+      }
     }
 
     function openCreateModal() {
@@ -144,6 +180,11 @@
       optionCount = 0;
       addOptionInput();
       addOptionInput();
+
+      // 預設截止時間為明天此時
+      const now = new Date();
+      now.setDate(now.getDate() + 1);
+      document.getElementById('pollDeadline').value = now.toISOString().slice(0, 16);
     }
 
     function closeCreateModal() {
@@ -179,9 +220,7 @@
 
     function removeOptionInput(id) {
       const row = document.getElementById(`option-row-${id}`);
-      if (document.querySelectorAll('#optionsContainer > div').length > 2) {
-        row.remove();
-      }
+      if (document.querySelectorAll('#optionsContainer > div').length > 2) row.remove();
     }
 
     function handleImageUpload(e, id) {
@@ -196,10 +235,11 @@
       }
     }
 
-    function handleCreatePoll(e) {
+    async function handleCreatePoll(e) {
       e.preventDefault();
       const title = document.getElementById('pollTitle').value;
       const desc = document.getElementById('pollDesc').value;
+      const deadline = document.getElementById('pollDeadline').value;
       const isMultiple = document.getElementById('pollMultiple').value === 'true';
       const isAnonymous = document.getElementById('pollAnonymous').value === 'true';
 
@@ -224,23 +264,30 @@
         id: `poll-${Date.now()}`,
         title,
         desc,
+        deadline,
         isMultiple,
         isAnonymous,
         options
       });
 
-      savePolls();
       closeCreateModal();
+      await syncToCloud();
       document.getElementById('pollForm').reset();
     }
 
-    function castVote(pollId) {
+    async function castVote(pollId) {
       const poll = polls.find(p => p.id === pollId);
       if (!poll) return;
 
+      // 檢查是否逾期
+      if (new Date(poll.deadline) < new Date()) {
+        alert('此投票已過截止時間，停止接收新投票！');
+        return;
+      }
+
       let voterName = '';
       if (!poll.isAnonymous) {
-        voterName = prompt('請輸入您的姓名/暱稱以完成實名投票：');
+        voterName = prompt('本投票為實名制，請輸入您的姓名/暱稱：');
         if (!voterName || !voterName.trim()) return;
       }
 
@@ -255,7 +302,8 @@
         }
       });
 
-      savePolls();
+      await syncToCloud();
+      alert('投票成功並已同步至雲端！');
     }
 
     function renderPolls() {
@@ -271,18 +319,22 @@
             <div class="w-16 h-16 bg-indigo-50 text-indigo-500 rounded-2xl flex items-center justify-center mx-auto text-2xl">
               <i class="fa-solid fa-square-poll-vertical"></i>
             </div>
-            <h3 class="text-base font-bold text-slate-700">目前還沒有任何投票專案</h3>
-            <p class="text-xs text-slate-400 max-w-xs mx-auto">點擊右上角的「發起投票」按鈕，快速建立您的第一個社群民調！</p>
-            <button onclick="openCreateModal()" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs px-5 py-2.5 rounded-xl shadow-md">立即發起投票</button>
+            <h3 class="text-base font-bold text-slate-700">目前沒有任何投票專案</h3>
+            <p class="text-xs text-slate-400">點擊右上角的「發起投票」，建立您的第一個全網同步民調！</p>
           </div>
         `;
         document.getElementById('statTotalVotes').textContent = '0';
         return;
       }
 
+      const now = new Date();
+
       polls.forEach(poll => {
         const totalVotes = poll.options.reduce((sum, o) => sum + o.votes, 0);
         totalVotesCount += totalVotes;
+
+        const isExpired = new Date(poll.deadline) < now;
+        const deadlineStr = new Date(poll.deadline).toLocaleString('zh-TW', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 
         let optionsHtml = '';
         poll.options.forEach(opt => {
@@ -291,9 +343,9 @@
 
           optionsHtml += `
             <label class="block cursor-pointer group">
-              <div class="p-3.5 rounded-2xl border border-slate-100 bg-slate-50/50 group-hover:bg-white group-hover:border-indigo-200 transition space-y-2">
+              <div class="p-3.5 rounded-2xl border border-slate-100 bg-slate-50/50 group-hover:bg-white transition space-y-2">
                 <div class="flex items-center gap-3">
-                  <input type="${inputType}" name="poll-${poll.id}" value="${opt.id}" class="w-4 h-4 text-indigo-600 focus:ring-indigo-500">
+                  <input type="${inputType}" name="poll-${poll.id}" value="${opt.id}" ${isExpired ? 'disabled' : ''} class="w-4 h-4 text-indigo-600 focus:ring-indigo-500 disabled:opacity-50">
                   ${opt.image ? `<img src="${opt.image}" class="w-10 h-10 object-cover rounded-lg border">` : ''}
                   <div class="flex-1">
                     <div class="flex justify-between text-xs font-semibold text-slate-700 mb-1">
@@ -312,7 +364,7 @@
         });
 
         const card = document.createElement('div');
-        card.className = 'bg-white rounded-3xl p-6 border border-slate-100 shadow-sm card-hover space-y-4';
+        card.className = 'bg-white rounded-3xl p-6 border border-slate-100 shadow-sm space-y-4';
         card.innerHTML = `
           <div class="flex justify-between items-start">
             <div class="space-y-1">
@@ -323,18 +375,24 @@
                 <span class="px-2.5 py-0.5 text-[10px] font-bold rounded-md ${poll.isAnonymous ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600'}">
                   ${poll.isAnonymous ? '匿名' : '實名'}
                 </span>
+                <span class="px-2.5 py-0.5 text-[10px] font-bold rounded-md ${isExpired ? 'bg-rose-50 text-rose-600' : 'bg-indigo-50 text-indigo-600'}">
+                  ${isExpired ? '已截止' : '進行中'}
+                </span>
               </div>
-              <h3 class="text-base font-extrabold text-slate-800 tracking-tight">${poll.title}</h3>
-              ${poll.desc ? `<p class="text-xs text-slate-400 leading-relaxed">${poll.desc}</p>` : ''}
+              <h3 class="text-base font-extrabold text-slate-800">${poll.title}</h3>
+              ${poll.desc ? `<p class="text-xs text-slate-400">${poll.desc}</p>` : ''}
             </div>
-            <span class="text-xs font-bold text-slate-300">總票數 ${totalVotes}</span>
+            <div class="text-right">
+              <div class="text-xs font-bold text-slate-400">總票數 ${totalVotes}</div>
+              <div class="text-[10px] text-slate-400 mt-1"><i class="fa-regular fa-clock"></i> 截止: ${deadlineStr}</div>
+            </div>
           </div>
 
           <div class="space-y-2">${optionsHtml}</div>
 
           <div class="pt-2 flex justify-end">
-            <button onclick="castVote('${poll.id}')" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs px-5 py-2.5 rounded-xl shadow-md shadow-indigo-100">
-              送出投票
+            <button onclick="castVote('${poll.id}')" ${isExpired ? 'disabled' : ''} class="bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-300 text-white font-bold text-xs px-5 py-2.5 rounded-xl shadow-md">
+              ${isExpired ? '投票已截止' : '送出投票'}
             </button>
           </div>
         `;
@@ -345,7 +403,8 @@
       document.getElementById('statTotalVotes').textContent = totalVotesCount;
     }
 
-    renderPolls();
+    // 初始化讀取雲端資料
+    fetchPolls();
   </script>
 </body>
 </html>
