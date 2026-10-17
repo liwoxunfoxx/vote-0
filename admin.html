@@ -156,6 +156,11 @@
           const p = document.createElement('p');
           p.textContent = `${option.text || option.id || '選項'}：${Number(option.votes || 0)} 票`;
           card.appendChild(p);
+
+          const voters = document.createElement('p');
+          voters.textContent = '投票者：' +
+            ((option.voters || []).join('、') || '尚無投票者資料');
+          card.appendChild(voters);
         }
 
         const created = document.createElement('small');
