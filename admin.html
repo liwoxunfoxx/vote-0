@@ -291,17 +291,28 @@
       showMessage('正在讀取投票資料……');
 
       try {
-        const { data, error } = await db
-          .from('polls')
-          .select('id, data, created_at')
-          .order('created_at', { ascending: false });
+              const { data, error } = await db.rpc('admin_list_polls');
+
+      if (error) {
+        showMessage('讀取失敗：' + error.message);
+        return;
+      }
+
+      const polls = (Array.isArray(data) ? data : [])
+        .map(row => ({
+          id: row.id,
+          data: row.data,
+          created_at: row.created_at
+        }))
+        .sort((a, b) =>
+          new Date(b.created_at || 0) - new Date(a.created_at || 0)
+        );
 
         if (error) {
           showMessage('讀取失敗：' + error.message);
           return;
         }
 
-        const polls = data || [];
         let totalVotes = 0;
 
         for (const row of polls) {
