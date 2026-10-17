@@ -5,43 +5,179 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>投票管理後台</title>
+
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
   <style>
-    body { font-family: sans-serif; max-width: 900px; margin: 30px auto; padding: 16px; background: #f7f5f2; color: #333; }
-    input, button { padding: 10px; margin: 5px 0; box-sizing: border-box; }
-    input { width: 100%; }
-    button { cursor: pointer; }
-    .card { background: white; padding: 16px; margin: 12px 0; border-radius: 10px; overflow-wrap: anywhere; }
-    .danger { color: #b42318; }
-    #dashboard { display: none; }
-    #message { white-space: pre-wrap; }
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: sans-serif;
+      max-width: 1000px;
+      margin: 30px auto;
+      padding: 16px;
+      background: #f7f5f2;
+      color: #333;
+    }
+
+    h1, h2, h3 {
+      color: #51443e;
+    }
+
+    input, button {
+      padding: 10px;
+      margin: 5px 0;
+      font-size: 15px;
+    }
+
+    input {
+      display: block;
+      width: 100%;
+      max-width: 400px;
+    }
+
+    button {
+      cursor: pointer;
+      border: 0;
+      border-radius: 6px;
+      background: #796458;
+      color: white;
+    }
+
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .danger {
+      background: #b74343;
+    }
+
+    .card {
+      background: white;
+      padding: 18px;
+      margin: 18px 0;
+      border-radius: 10px;
+      box-shadow: 0 2px 8px #0000000c;
+      overflow-wrap: anywhere;
+    }
+
+    .stats {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+
+    .stat-box {
+      flex: 1;
+      min-width: 150px;
+      padding: 16px;
+      background: #eee6df;
+      border-radius: 8px;
+    }
+
+    .stat-number {
+      font-size: 26px;
+      font-weight: bold;
+    }
+
+    .table-wrap {
+      width: 100%;
+      overflow-x: auto;
+      margin: 12px 0;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: white;
+    }
+
+    th, td {
+      border: 1px solid #ddd2ca;
+      padding: 10px;
+      text-align: left;
+      vertical-align: top;
+      overflow-wrap: anywhere;
+    }
+
+    th {
+      background: #eee6df;
+    }
+
+    #message {
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+
+    #dashboard {
+      display: none;
+    }
+
+    .muted {
+      color: #777;
+      font-size: 14px;
+    }
   </style>
 </head>
+
 <body>
   <h1>投票管理後台</h1>
 
   <section id="login">
     <h2>管理者登入</h2>
-    <input id="email" type="email" placeholder="管理者電子郵件">
-    <input id="password" type="password" placeholder="密碼">
+
+    <input
+      id="email"
+      type="email"
+      placeholder="管理者電子郵件"
+      autocomplete="username"
+    >
+
+    <input
+      id="password"
+      type="password"
+      placeholder="密碼"
+      autocomplete="current-password"
+    >
+
     <button id="loginBtn">登入</button>
   </section>
 
   <section id="dashboard">
     <p id="account"></p>
+
     <button id="refreshBtn">重新整理統計</button>
     <button id="logoutBtn">登出</button>
 
     <h2>統計資料</h2>
-    <p id="stats">載入中……</p>
+
+    <div class="stats">
+      <div class="stat-box">
+        <div>投票總數</div>
+        <div id="statPolls" class="stat-number">0</div>
+      </div>
+
+      <div class="stat-box">
+        <div>累積選項票數</div>
+        <div id="statVotes" class="stat-number">0</div>
+      </div>
+    </div>
+
+    <h2>投票列表</h2>
     <div id="pollList"></div>
   </section>
 
   <p id="message" role="status"></p>
 
   <script>
-    const SUPABASE_URL = 'https://dyohuufplhbuwyjqwsxk.supabase.co';
-    const SUPABASE_ANON_KEY = 'sb_publishable_sMXsZYCo7shVUDDttkny-A_Leod4sUv';
+    const SUPABASE_URL =
+      'https://dyohuufplhbuwyjqwsxk.supabase.co';
+
+    const SUPABASE_ANON_KEY =
+      'sb_publishable_sMXsZYCo7shVUDDttkny-A_Leod4sUv';
 
     const db = window.supabase.createClient(
       SUPABASE_URL,
@@ -49,155 +185,269 @@
     );
 
     const $ = id => document.getElementById(id);
-    const message = text => $('message').textContent = text;
 
-    $('loginBtn').onclick = async () => {
-      message('正在登入……');
+    function showMessage(text) {
+      $('message').textContent = text;
+    }
 
-      const { error } = await db.auth.signInWithPassword({
-        email: $('email').value.trim(),
-        password: $('password').value
-      });
+    function addCell(row, text, isHeader = false) {
+      const cell = document.createElement(isHeader ? 'th' : 'td');
+      cell.textContent = String(text);
+      row.appendChild(cell);
+      return cell;
+    }
 
-      if (error) {
-        message('登入失敗：' + error.message);
+    $('loginBtn').addEventListener('click', async () => {
+      const email = $('email').value.trim();
+      const password = $('password').value;
+
+      if (!email || !password) {
+        showMessage('請輸入電子郵件和密碼。');
         return;
       }
 
-      await checkSession();
-    };
+      $('loginBtn').disabled = true;
+      showMessage('正在登入……');
 
-    $('logoutBtn').onclick = async () => {
-      await db.auth.signOut();
+      try {
+        const { error } = await db.auth.signInWithPassword({
+          email,
+          password
+        });
+
+        if (error) {
+          showMessage('登入失敗：' + error.message);
+          return;
+        }
+
+        await checkSession();
+      } finally {
+        $('loginBtn').disabled = false;
+      }
+    });
+
+    $('password').addEventListener('keydown', event => {
+      if (event.key === 'Enter') {
+        $('loginBtn').click();
+      }
+    });
+
+    $('logoutBtn').addEventListener('click', async () => {
+      const { error } = await db.auth.signOut();
+
+      if (error) {
+        showMessage('登出失敗：' + error.message);
+        return;
+      }
+
       $('dashboard').style.display = 'none';
       $('login').style.display = 'block';
       $('password').value = '';
-      message('已登出');
-    };
 
-    $('refreshBtn').onclick = loadPolls;
+      showMessage('已登出。');
+    });
+
+    $('refreshBtn').addEventListener('click', loadPolls);
 
     async function checkSession() {
-      const { data: { session } } = await db.auth.getSession();
+      const {
+        data: { session },
+        error: sessionError
+      } = await db.auth.getSession();
 
-      if (!session) {
+      if (sessionError || !session) {
         $('login').style.display = 'block';
         $('dashboard').style.display = 'none';
         return;
       }
 
-      // 由資料庫函式驗證管理者身分，不只依靠前端隱藏介面。
+      showMessage('正在驗證管理者權限……');
+
       const { data, error } = await db.rpc('is_poll_admin');
 
       if (error || data !== true) {
         await db.auth.signOut();
+
         $('login').style.display = 'block';
         $('dashboard').style.display = 'none';
-        message('此帳號沒有管理者權限，或管理者驗證失敗。');
+
+        showMessage(
+          '管理者驗證失敗：' +
+          (error?.message || '此帳號沒有管理者權限。')
+        );
         return;
       }
 
       $('login').style.display = 'none';
       $('dashboard').style.display = 'block';
       $('account').textContent = '已登入：' + session.user.email;
-      message('');
+
+      showMessage('');
       await loadPolls();
     }
 
     async function loadPolls() {
-      message('正在讀取統計……');
+      $('refreshBtn').disabled = true;
+      showMessage('正在讀取投票資料……');
 
-      const { data, error } = await db
-        .from('polls')
-        .select('id, data, created_at')
-        .order('created_at', { ascending: false });
+      try {
+        const { data, error } = await db
+          .from('polls')
+          .select('id, data, created_at')
+          .order('created_at', { ascending: false });
 
-      if (error) {
-        message('讀取失敗：' + error.message);
-        return;
-      }
-
-      let totalVotes = 0;
-
-      for (const row of data) {
-        const poll = row.data || {};
-        for (const option of (poll.options || [])) {
-          totalVotes += Number(option.votes || 0);
-        }
-      }
-
-      $('stats').textContent =
-        `投票總數：${data.length}　｜　累積選項票數：${totalVotes}`;
-
-      const list = $('pollList');
-      list.replaceChildren();
-
-      if (!data.length) {
-        list.textContent = '目前沒有投票。';
-        message('');
-        return;
-      }
-
-      for (const row of data) {
-        const poll = row.data || {};
-        const card = document.createElement('article');
-        card.className = 'card';
-
-        const title = document.createElement('h3');
-        title.textContent = poll.title || row.id;
-        card.appendChild(title);
-
-        const desc = document.createElement('p');
-        desc.textContent = poll.description || '';
-        card.appendChild(desc);
-
-        const options = poll.options || [];
-        for (const option of options) {
-          const p = document.createElement('p');
-          p.textContent = `${option.text || option.id || '選項'}：${Number(option.votes || 0)} 票`;
-          card.appendChild(p);
-
-          const voters = document.createElement('p');
-          voters.textContent = '投票者：' +
-            ((option.voters || []).join('、') || '尚無投票者資料');
-          card.appendChild(voters);
+        if (error) {
+          showMessage('讀取失敗：' + error.message);
+          return;
         }
 
-        const created = document.createElement('small');
-        created.textContent = '建立時間：' +
-          (row.created_at ? new Date(row.created_at).toLocaleString() : '未知');
-        card.appendChild(created);
+        const polls = data || [];
+        let totalVotes = 0;
 
-        const del = document.createElement('button');
-        del.className = 'danger';
-        del.textContent = '刪除投票';
-        del.onclick = async () => {
-          if (!confirm(`確定刪除「${poll.title || row.id}」？此操作無法復原。`)) return;
+        for (const row of polls) {
+          const poll = row.data || {};
 
-          del.disabled = true;
-          message('正在刪除……');
+          for (const option of (poll.options || [])) {
+            totalVotes += Number(option.votes || 0);
+          }
+        }
 
-          const { data: ok, error } = await db.rpc('admin_delete_poll', {
-            p_poll_id: row.id
-          });
+        $('statPolls').textContent = polls.length;
+        $('statVotes').textContent = totalVotes;
 
-          if (error || ok !== true) {
-            message('刪除失敗：' + (error?.message || '投票不存在或未刪除'));
-            del.disabled = false;
-            return;
+        const list = $('pollList');
+        list.replaceChildren();
+
+        if (polls.length === 0) {
+          list.textContent = '目前沒有投票。';
+          showMessage('');
+          return;
+        }
+
+        for (const row of polls) {
+          const poll = row.data || {};
+          const card = document.createElement('article');
+          card.className = 'card';
+
+          const title = document.createElement('h3');
+          title.textContent = poll.title || row.id;
+          card.appendChild(title);
+
+          const description = document.createElement('p');
+          description.textContent =
+            poll.description || '沒有投票說明';
+          card.appendChild(description);
+
+          const created = document.createElement('p');
+          created.className = 'muted';
+          created.textContent = '建立時間：' +
+            (row.created_at
+              ? new Date(row.created_at).toLocaleString()
+              : '未知');
+          card.appendChild(created);
+
+          const options = poll.options || [];
+          const tableWrap = document.createElement('div');
+          tableWrap.className = 'table-wrap';
+
+          const table = document.createElement('table');
+          const thead = document.createElement('thead');
+          const headerRow = document.createElement('tr');
+
+          addCell(headerRow, '選項', true);
+          addCell(headerRow, '票數', true);
+          addCell(headerRow, '投票者', true);
+
+          thead.appendChild(headerRow);
+          table.appendChild(thead);
+
+          const tbody = document.createElement('tbody');
+
+          for (const option of options) {
+            const tr = document.createElement('tr');
+
+            addCell(
+              tr,
+              option.text || option.id || '未命名選項'
+            );
+
+            addCell(tr, Number(option.votes || 0));
+
+            const voters = Array.isArray(option.voters)
+              ? option.voters
+              : [];
+
+            addCell(
+              tr,
+              voters.length
+                ? voters.join('、')
+                : '尚無投票者資料'
+            );
+
+            tbody.appendChild(tr);
           }
 
-          message('已刪除投票。');
-          await loadPolls();
-        };
-        card.appendChild(del);
-        list.appendChild(card);
-      }
+          table.appendChild(tbody);
+          tableWrap.appendChild(table);
+          card.appendChild(tableWrap);
 
-      message('');
+          const deleteButton = document.createElement('button');
+          deleteButton.className = 'danger';
+          deleteButton.textContent = '刪除投票';
+
+          deleteButton.addEventListener('click', async () => {
+            const confirmed = confirm(
+              `確定刪除「${poll.title || row.id}」？此操作無法復原。`
+            );
+
+            if (!confirmed) return;
+
+            deleteButton.disabled = true;
+            showMessage('正在刪除投票……');
+
+            try {
+              const { data: result, error: deleteError } =
+                await db.rpc('admin_delete_poll', {
+                  p_poll_id: row.id
+                });
+
+              if (deleteError || result !== true) {
+                showMessage(
+                  '刪除失敗：' +
+                  (deleteError?.message || '投票不存在或未刪除')
+                );
+                deleteButton.disabled = false;
+                return;
+              }
+
+              showMessage('投票已刪除。');
+              await loadPolls();
+            } catch (err) {
+              showMessage('刪除失敗：' + err.message);
+              deleteButton.disabled = false;
+            }
+          });
+
+          card.appendChild(deleteButton);
+          list.appendChild(card);
+        }
+
+        showMessage('');
+      } catch (err) {
+        showMessage('讀取失敗：' + err.message);
+      } finally {
+        $('refreshBtn').disabled = false;
+      }
     }
 
     checkSession();
+
+    db.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_OUT') {
+        $('dashboard').style.display = 'none';
+        $('login').style.display = 'block';
+      }
+    });
   </script>
 </body>
 </html>
