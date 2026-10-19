@@ -25,6 +25,7 @@
         <span class="font-extrabold text-lg tracking-tight bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">LIVE POLL</span>
       </div>
       <div class="flex items-center gap-3">
+        <a href="admin.html" class="text-slate-500 hover:text-indigo-600 p-2 text-sm font-semibold">管理投票</a>
         <button onclick="fetchPolls()" class="text-slate-500 hover:text-indigo-600 p-2 text-sm font-semibold flex items-center gap-1" title="整理最新票數">
           <i class="fa-solid fa-rotate"></i> 重新整理
         </button>
@@ -95,7 +96,7 @@
         <div class="grid grid-cols-2 gap-3 bg-slate-50 p-3 rounded-2xl border border-slate-100">
           <div>
             <label class="block text-xs font-semibold text-slate-500 mb-1">選擇模式</label>
-            <select id="pollMultiple" class="w-full text-xs font-medium p-2 border rounded-lg bg-white">
+            <select id="pollMultiple" onchange="updateMaxSelectionsInput()" class="w-full text-xs font-medium p-2 border rounded-lg bg-white">
               <option value="false">單選模式</option>
               <option value="true">多選模式</option>
             </select>
@@ -107,6 +108,12 @@
               <option value="false">實名填名</option>
             </select>
           </div>
+        </div>
+
+        <div id="maxSelectionsField" class="hidden">
+          <label for="pollMaxSelections" class="block text-xs font-bold text-slate-600 mb-1">每次最多可選幾項 *</label>
+          <input type="number" id="pollMaxSelections" min="1" value="2" class="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none text-sm">
+          <p class="text-xs text-slate-400 mt-1">只適用於多選投票，不可超過選項數量。</p>
         </div>
 
         <div>
@@ -235,11 +242,35 @@
         <input type="hidden" class="option-img-data" id="img-data-${id}">
       `;
       document.getElementById('optionsContainer').appendChild(div);
+      updateMaxSelectionsInput();
     }
 
     function removeOptionInput(id) {
       const row = document.getElementById(`option-row-${id}`);
-      if (document.querySelectorAll('#optionsContainer > div').length > 2) row.remove();
+      if (row && document.querySelectorAll('#optionsContainer > div').length > 2) {
+        row.remove();
+        updateMaxSelectionsInput();
+      }
+    }
+
+    function updateMaxSelectionsInput() {
+      const isMultiple = document.getElementById('pollMultiple').value === 'true';
+      const field = document.getElementById('maxSelectionsField');
+      const input = document.getElementById('pollMaxSelections');
+      const count = document.querySelectorAll('#optionsContainer > div').length;
+      field.classList.toggle('hidden', !isMultiple);
+      input.required = isMultiple;
+      input.max = Math.max(1, count);
+      if (isMultiple && (!Number.isInteger(Number(input.value)) || Number(input.value) < 1 || Number(input.value) > count)) {
+        input.value = count;
+      }
+    }
+
+    function maxSelectionsFor(poll) {
+      if (!poll.isMultiple) return 1;
+      const configured = Number(poll.maxSelections);
+      return Number.isInteger(configured) && configured >= 1 && configured <= poll.options.length
+        ? configured : poll.options.length;
     }
 
     function handleImageUpload(e, id) {
@@ -276,7 +307,11 @@
           if (text) options.push({ id: `opt-${Date.now()}-${idx}`, text, image: image || '', votes: 0, voters: [] });
         });
         if (options.length < 2) throw new Error('至少需要兩個有效選項。');
-        const poll = { id: `poll-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, title, desc, deadline, isMultiple, isAnonymous, options, votedTokens: [] };
+        const maxSelections = isMultiple ? Number(document.getElementById('pollMaxSelections').value) : 1;
+        if (!Number.isInteger(maxSelections) || maxSelections < 1 || maxSelections > options.length) {
+          throw new Error(`每次投票上限須介於 1 與 ${options.length} 之間。`);
+        }
+        const poll = { id: `poll-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, title, desc, deadline, isMultiple, isAnonymous, maxSelections, options, votedTokens: [] };
         await createPollInCloud(poll);
         closeCreateModal();
         document.getElementById('pollForm').reset();
@@ -304,9 +339,10 @@
       const inputs = document.querySelectorAll(`input[name="poll-${pollId}"]:checked`);
       const optionIds = Array.from(inputs).map(input => input.value);
       if (!optionIds.length) return alert('請先勾選選項！');
-      if (!poll.isMultiple && optionIds.length > 1) return alert('此投票只能選擇一個選項。');
+      const maxSelections = maxSelectionsFor(poll);
+      if (optionIds.length > maxSelections) return alert(`每次最多只能選擇 ${maxSelections} 項。`);
       try {
-        const { error } = await getSupabase().rpc('cast_vote', {
+        const { error } = await getSupabase().rpc('cast_vote_limited', {
           p_poll_id: pollId,
           p_option_ids: optionIds,
           p_voter_name: voterName || null,
@@ -336,16 +372,26 @@
         const totalVotes = poll.options.reduce((sum, o) => sum + Number(o.votes || 0), 0);
         totalVotesCount += totalVotes;
         const isExpired = new Date(poll.deadline) < now;
+        const maxSelections = maxSelectionsFor(poll);
         const deadlineStr = new Date(poll.deadline).toLocaleString('zh-TW', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
         let optionsHtml = '';
         poll.options.forEach(opt => {
           const percent = totalVotes === 0 ? 0 : Math.round((Number(opt.votes || 0) / totalVotes) * 100);
           const inputType = poll.isMultiple ? 'checkbox' : 'radio';
-          optionsHtml += `<label class="block cursor-pointer group"><div class="p-3.5 rounded-2xl border border-slate-100 bg-slate-50/50 group-hover:bg-white transition space-y-2"><div class="flex items-center gap-3"><input type="${inputType}" name="poll-${escapeHtml(poll.id)}" value="${escapeHtml(opt.id)}" ${isExpired ? 'disabled' : ''} class="w-4 h-4 text-indigo-600 focus:ring-indigo-500 disabled:opacity-50">${opt.image ? `<img src="${opt.image}" class="w-10 h-10 object-cover rounded-lg border">` : ''}<div class="flex-1"><div class="flex justify-between text-xs font-semibold text-slate-700 mb-1"><span>${escapeHtml(opt.text)}</span><span class="text-indigo-600 font-bold">${Number(opt.votes || 0)} 票 (${percent}%)</span></div><div class="w-full bg-slate-200/60 rounded-full h-1.5 overflow-hidden"><div class="bg-indigo-600 h-1.5 rounded-full transition-all duration-500" style="width: ${percent}%"></div></div>${!poll.isAnonymous && opt.voters && opt.voters.length ? `<div class="text-[10px] text-slate-400 mt-1">投票者: ${opt.voters.map(escapeHtml).join(', ')}</div>` : ''}</div></div></div></label>`;
+          optionsHtml += `<label class="block cursor-pointer group"><div class="p-3.5 rounded-2xl border border-slate-100 bg-slate-50/50 group-hover:bg-white transition space-y-2"><div class="flex items-center gap-3"><input type="${inputType}" name="poll-${escapeHtml(poll.id)}" value="${escapeHtml(opt.id)}" ${isExpired ? 'disabled' : ''} class="w-4 h-4 text-indigo-600 focus:ring-indigo-500 disabled:opacity-50">${opt.image ? `<img src="${escapeHtml(opt.image)}" class="w-10 h-10 object-cover rounded-lg border">` : ''}<div class="flex-1"><div class="flex justify-between text-xs font-semibold text-slate-700 mb-1"><span>${escapeHtml(opt.text)}</span><span class="text-indigo-600 font-bold">${Number(opt.votes || 0)} 票 (${percent}%)</span></div><div class="w-full bg-slate-200/60 rounded-full h-1.5 overflow-hidden"><div class="bg-indigo-600 h-1.5 rounded-full transition-all duration-500" style="width: ${percent}%"></div></div>${!poll.isAnonymous && opt.voters && opt.voters.length ? `<div class="text-[10px] text-slate-400 mt-1">投票者: ${opt.voters.map(escapeHtml).join(', ')}</div>` : ''}</div></div></div></label>`;
         });
         const card = document.createElement('div');
         card.className = 'bg-white rounded-3xl p-6 border border-slate-100 shadow-sm space-y-4';
-        card.innerHTML = `<div class="flex justify-between items-start"><div class="space-y-1"><div class="flex items-center gap-2 flex-wrap"><span class="px-2.5 py-0.5 text-[10px] font-bold rounded-md ${poll.isMultiple ? 'bg-purple-50 text-purple-600' : 'bg-blue-50 text-blue-600'}">${poll.isMultiple ? '多選' : '單選'}</span><span class="px-2.5 py-0.5 text-[10px] font-bold rounded-md ${poll.isAnonymous ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600'}">${poll.isAnonymous ? '匿名' : '實名'}</span><span class="px-2.5 py-0.5 text-[10px] font-bold rounded-md ${isExpired ? 'bg-rose-50 text-rose-600' : 'bg-indigo-50 text-indigo-600'}">${isExpired ? '已截止' : '進行中'}</span></div><h3 class="text-base font-extrabold text-slate-800">${escapeHtml(poll.title)}</h3>${poll.desc ? `<p class="text-xs text-slate-400">${escapeHtml(poll.desc)}</p>` : ''}</div><div class="text-right shrink-0 ml-3"><div class="text-xs font-bold text-slate-400">總票數 ${totalVotes}</div><div class="text-[10px] text-slate-400 mt-1"><i class="fa-regular fa-clock"></i> 截止: ${deadlineStr}</div></div></div><div class="space-y-2">${optionsHtml}</div><div class="pt-2 flex justify-end"><button onclick="castVote('${escapeHtml(poll.id)}')" ${isExpired ? 'disabled' : ''} class="bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-300 text-white font-bold text-xs px-5 py-2.5 rounded-xl shadow-md">${isExpired ? '投票已截止' : '送出投票'}</button></div>`;
+        card.innerHTML = `<div class="flex justify-between items-start"><div class="space-y-1"><div class="flex items-center gap-2 flex-wrap"><span class="px-2.5 py-0.5 text-[10px] font-bold rounded-md ${poll.isMultiple ? 'bg-purple-50 text-purple-600' : 'bg-blue-50 text-blue-600'}">${poll.isMultiple ? '多選' : '單選'}</span><span class="px-2.5 py-0.5 text-[10px] font-bold rounded-md ${poll.isAnonymous ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600'}">${poll.isAnonymous ? '匿名' : '實名'}</span><span class="px-2.5 py-0.5 text-[10px] font-bold rounded-md ${isExpired ? 'bg-rose-50 text-rose-600' : 'bg-indigo-50 text-indigo-600'}">${isExpired ? '已截止' : '進行中'}</span></div><h3 class="text-base font-extrabold text-slate-800">${escapeHtml(poll.title)}</h3>${poll.desc ? `<p class="text-xs text-slate-400">${escapeHtml(poll.desc)}</p>` : ''}${poll.isMultiple ? `<p class="text-xs text-indigo-600 font-semibold">每次最多選 ${maxSelections} 項</p>` : ''}</div><div class="text-right shrink-0 ml-3"><div class="text-xs font-bold text-slate-400">總票數 ${totalVotes}</div><div class="text-[10px] text-slate-400 mt-1"><i class="fa-regular fa-clock"></i> 截止: ${deadlineStr}</div></div></div><div class="space-y-2">${optionsHtml}</div><div class="pt-2 flex justify-end"><button onclick="castVote('${escapeHtml(poll.id)}')" ${isExpired ? 'disabled' : ''} class="bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-300 text-white font-bold text-xs px-5 py-2.5 rounded-xl shadow-md">${isExpired ? '投票已截止' : '送出投票'}</button></div>`;
+        if (poll.isMultiple) {
+          card.addEventListener('change', event => {
+            if (event.target.matches('input[type="checkbox"]') && event.target.checked
+                && card.querySelectorAll('input[type="checkbox"]:checked').length > maxSelections) {
+              event.target.checked = false;
+              alert(`每次最多只能選擇 ${maxSelections} 項。`);
+            }
+          });
+        }
         container.appendChild(card);
       });
       document.getElementById('statTotalVotes').textContent = totalVotesCount;

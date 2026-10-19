@@ -26,16 +26,39 @@
       color: #51443e;
     }
 
-    input, button {
+    input, button, textarea, select {
       padding: 10px;
       margin: 5px 0;
       font-size: 15px;
     }
 
-    input {
+    input, textarea, select {
       display: block;
       width: 100%;
       max-width: 400px;
+    }
+
+    .edit-form {
+      border-top: 1px solid #ddd2ca;
+      margin-top: 16px;
+      padding-top: 16px;
+    }
+
+    .edit-form label {
+      display: block;
+      margin-top: 10px;
+      font-weight: bold;
+    }
+
+    .edit-option {
+      padding: 10px;
+      margin: 8px 0;
+      border: 1px solid #ddd2ca;
+      border-radius: 6px;
+    }
+
+    .edit-option button, .edit-form button {
+      margin-right: 8px;
     }
 
     button {
@@ -125,6 +148,7 @@
 
 <body>
   <h1>投票管理後台</h1>
+  <p><a href="index.html">返回投票頁</a></p>
 
   <section id="login">
     <h2>管理者登入</h2>
@@ -195,6 +219,225 @@
       cell.textContent = String(text);
       row.appendChild(cell);
       return cell;
+    }
+
+    function addField(form, labelText, control) {
+      const label = document.createElement('label');
+      label.textContent = labelText;
+      label.appendChild(control);
+      form.appendChild(label);
+      return control;
+    }
+
+    function makeSelect(choices, current) {
+      const select = document.createElement('select');
+      for (const [value, label] of choices) {
+        const option = document.createElement('option');
+        option.value = value;
+        option.textContent = label;
+        select.appendChild(option);
+      }
+      select.value = String(current);
+      return select;
+    }
+
+    function buildEditForm(row) {
+      const poll = row.data || {};
+      const currentOptions = Array.isArray(poll.options) ? poll.options : [];
+      const hasVotes = currentOptions.some(option => Number(option.votes || 0) > 0);
+      const form = document.createElement('form');
+      form.className = 'edit-form';
+      form.hidden = true;
+
+      const title = document.createElement('input');
+      title.type = 'text';
+      title.required = true;
+      title.value = poll.title || '';
+      addField(form, '投票主題', title);
+
+      const desc = document.createElement('textarea');
+      desc.rows = 2;
+      desc.value = poll.desc || poll.description || '';
+      addField(form, '補充說明', desc);
+
+      const deadline = document.createElement('input');
+      deadline.type = 'datetime-local';
+      deadline.required = true;
+      const deadlineDate = new Date(poll.deadline);
+      if (!Number.isNaN(deadlineDate.getTime())) {
+        deadline.value = new Date(deadlineDate.getTime() - deadlineDate.getTimezoneOffset() * 60000)
+          .toISOString().slice(0, 16);
+      }
+      addField(form, '截止時間', deadline);
+
+      const multiple = makeSelect([['false', '單選'], ['true', '多選']], !!poll.isMultiple);
+      const anonymous = makeSelect([['true', '匿名'], ['false', '填寫姓名']], !!poll.isAnonymous);
+      multiple.disabled = hasVotes;
+      anonymous.disabled = hasVotes;
+      addField(form, '選擇模式', multiple);
+      addField(form, '投票者名稱', anonymous);
+      if (hasVotes) {
+        const note = document.createElement('p');
+        note.className = 'muted';
+        note.textContent = '已有票數的投票不可變更單選／多選與匿名設定。';
+        form.appendChild(note);
+      }
+
+      const maxSelections = document.createElement('input');
+      maxSelections.type = 'number';
+      maxSelections.min = '1';
+      maxSelections.value = String(poll.isMultiple
+        ? (Number.isInteger(Number(poll.maxSelections)) && Number(poll.maxSelections) >= 1
+          ? poll.maxSelections : currentOptions.length)
+        : 1);
+      const maxLabel = document.createElement('label');
+      maxLabel.textContent = '每次最多可選幾項';
+      maxLabel.appendChild(maxSelections);
+      form.appendChild(maxLabel);
+
+      const optionsLabel = document.createElement('p');
+      optionsLabel.textContent = '選項';
+      optionsLabel.style.fontWeight = 'bold';
+      form.appendChild(optionsLabel);
+      const optionList = document.createElement('div');
+      form.appendChild(optionList);
+
+      function updateLimit() {
+        maxLabel.hidden = multiple.value !== 'true';
+        maxSelections.required = multiple.value === 'true';
+        maxSelections.max = String(optionList.children.length);
+        if (Number(maxSelections.value) > optionList.children.length) {
+          maxSelections.value = String(optionList.children.length);
+        }
+      }
+      multiple.addEventListener('change', updateLimit);
+
+      function addOption(option = {}, refreshLimit = true) {
+        const optionRow = document.createElement('div');
+        optionRow.className = 'edit-option';
+        optionRow.dataset.id = option.id || `opt-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+        optionRow._image = option.image || '';
+        optionRow._imagePromise = Promise.resolve();
+
+        const text = document.createElement('input');
+        text.type = 'text';
+        text.required = true;
+        text.placeholder = '選項名稱';
+        text.value = option.text || '';
+        optionRow.appendChild(text);
+
+        const imageStatus = document.createElement('span');
+        imageStatus.className = 'muted';
+        imageStatus.textContent = optionRow._image ? '目前有圖片' : '沒有圖片';
+        optionRow.appendChild(imageStatus);
+
+        const file = document.createElement('input');
+        file.type = 'file';
+        file.accept = 'image/*';
+        file.addEventListener('change', () => {
+          const selected = file.files[0];
+          if (!selected) return;
+          if (!selected.type.startsWith('image/') || selected.size > 700 * 1024) {
+            showMessage('圖片須為 700 KB 以下的圖片檔。');
+            file.value = '';
+            return;
+          }
+          optionRow._imagePromise = new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => {
+              optionRow._image = reader.result;
+              imageStatus.textContent = selected.name;
+              resolve();
+            };
+            reader.onerror = () => reject(new Error('圖片讀取失敗。'));
+            reader.readAsDataURL(selected);
+          });
+        });
+        optionRow.appendChild(file);
+
+        const clearImage = document.createElement('button');
+        clearImage.type = 'button';
+        clearImage.textContent = '移除圖片';
+        clearImage.addEventListener('click', () => {
+          optionRow._imagePromise = Promise.resolve();
+          optionRow._image = '';
+          file.value = '';
+          imageStatus.textContent = '沒有圖片';
+        });
+        optionRow.appendChild(clearImage);
+
+        const remove = document.createElement('button');
+        remove.type = 'button';
+        remove.textContent = '刪除選項';
+        remove.disabled = Number(option.votes || 0) > 0;
+        remove.title = remove.disabled ? '已有票數的選項不可刪除' : '';
+        remove.addEventListener('click', () => {
+          if (optionList.children.length <= 2) return showMessage('至少需要兩個選項。');
+          optionRow.remove();
+          updateLimit();
+        });
+        optionRow.appendChild(remove);
+        optionList.appendChild(optionRow);
+        if (refreshLimit) updateLimit();
+      }
+
+      currentOptions.forEach(option => addOption(option, false));
+      updateLimit();
+      const addButton = document.createElement('button');
+      addButton.type = 'button';
+      addButton.textContent = '新增選項';
+      addButton.addEventListener('click', () => addOption());
+      form.appendChild(addButton);
+
+      const saveButton = document.createElement('button');
+      saveButton.type = 'submit';
+      saveButton.textContent = '儲存變更';
+      form.appendChild(saveButton);
+
+      const cancelButton = document.createElement('button');
+      cancelButton.type = 'button';
+      cancelButton.textContent = '取消';
+      cancelButton.addEventListener('click', () => { form.hidden = true; });
+      form.appendChild(cancelButton);
+
+      form.addEventListener('submit', async event => {
+        event.preventDefault();
+        saveButton.disabled = true;
+        try {
+          const optionRows = Array.from(optionList.children);
+          await Promise.all(optionRows.map(item => item._imagePromise));
+          const options = optionRows.map(item => ({
+            id: item.dataset.id,
+            text: item.querySelector('input[type="text"]').value.trim(),
+            image: item._image
+          }));
+          if (options.length < 2 || options.some(option => !option.text)) {
+            throw new Error('至少需要兩個有名稱的選項。');
+          }
+          const isMultiple = multiple.value === 'true';
+          const limit = isMultiple ? Number(maxSelections.value) : 1;
+          if (!Number.isInteger(limit) || limit < 1 || limit > options.length) {
+            throw new Error(`每次投票上限須介於 1 與 ${options.length} 之間。`);
+          }
+          const changes = {
+            title: title.value.trim(), desc: desc.value.trim(),
+            deadline: new Date(deadline.value).toISOString(),
+            isMultiple, isAnonymous: anonymous.value === 'true',
+            maxSelections: limit, options
+          };
+          const { data, error } = await db.rpc('admin_update_poll', {
+            p_poll_id: row.id, p_changes: changes
+          });
+          if (error || data !== true) throw error || new Error('資料庫未確認更新。');
+          showMessage('投票已更新。');
+          await loadPolls();
+        } catch (error) {
+          showMessage('更新失敗：' + error.message);
+        } finally {
+          saveButton.disabled = false;
+        }
+      });
+      return form;
     }
 
     $('loginBtn').addEventListener('click', async () => {
@@ -291,27 +534,22 @@
       showMessage('正在讀取投票資料……');
 
       try {
-              const { data, error } = await db.rpc('admin_list_polls');
-
-      if (error) {
-        showMessage('讀取失敗：' + error.message);
-        return;
-      }
-
-      const polls = (Array.isArray(data) ? data : [])
-        .map(row => ({
-          id: row.id,
-          data: row.data,
-          created_at: row.created_at
-        }))
-        .sort((a, b) =>
-          new Date(b.created_at || 0) - new Date(a.created_at || 0)
-        );
+        const { data, error } = await db.rpc('admin_list_polls');
 
         if (error) {
           showMessage('讀取失敗：' + error.message);
           return;
         }
+
+        const polls = (Array.isArray(data) ? data : [])
+          .map(row => ({
+            id: row.id,
+            data: row.data,
+            created_at: row.created_at
+          }))
+          .sort((a, b) =>
+            new Date(b.created_at || 0) - new Date(a.created_at || 0)
+          );
 
         let totalVotes = 0;
 
@@ -346,7 +584,7 @@
 
           const description = document.createElement('p');
           description.textContent =
-            poll.description || '沒有投票說明';
+            poll.desc || poll.description || '沒有投票說明';
           card.appendChild(description);
 
           const created = document.createElement('p');
@@ -401,6 +639,22 @@
           table.appendChild(tbody);
           tableWrap.appendChild(table);
           card.appendChild(tableWrap);
+
+          if (poll.isMultiple) {
+            const limit = document.createElement('p');
+            limit.className = 'muted';
+            limit.textContent = '每次最多可選 ' + (poll.maxSelections || options.length) + ' 項';
+            card.appendChild(limit);
+          }
+
+          const editButton = document.createElement('button');
+          editButton.textContent = '編輯投票';
+          const editForm = buildEditForm(row);
+          editButton.addEventListener('click', () => {
+            editForm.hidden = !editForm.hidden;
+          });
+          card.appendChild(editButton);
+          card.appendChild(editForm);
 
           const deleteButton = document.createElement('button');
           deleteButton.className = 'danger';
