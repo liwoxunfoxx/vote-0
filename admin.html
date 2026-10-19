@@ -575,6 +575,8 @@
 
         for (const row of polls) {
           const poll = row.data || {};
+          const deadlineAt = new Date(poll.deadline).getTime();
+          const isActive = Number.isFinite(deadlineAt) && deadlineAt > Date.now();
           const card = document.createElement('article');
           card.className = 'card';
 
@@ -594,6 +596,11 @@
               ? new Date(row.created_at).toLocaleString()
               : '未知');
           card.appendChild(created);
+
+          const status = document.createElement('p');
+          status.className = 'muted';
+          status.textContent = '狀態：' + (isActive ? '進行中' : '已截止');
+          card.appendChild(status);
 
           const options = poll.options || [];
           const tableWrap = document.createElement('div');
@@ -655,6 +662,29 @@
           });
           card.appendChild(editButton);
           card.appendChild(editForm);
+
+          if (isActive) {
+            const endButton = document.createElement('button');
+            endButton.textContent = '提前結束投票';
+            endButton.addEventListener('click', async () => {
+              if (!confirm(`確定立即結束「${poll.title || row.id}」？結束後將停止接收新票。`)) return;
+
+              endButton.disabled = true;
+              showMessage('正在結束投票……');
+              try {
+                const { data: ended, error: endError } = await db.rpc('admin_end_poll', {
+                  p_poll_id: row.id
+                });
+                if (endError) throw endError;
+                await loadPolls();
+                showMessage(ended === true ? '投票已提前結束。' : '此投票已截止。');
+              } catch (err) {
+                showMessage('結束投票失敗：' + err.message);
+                endButton.disabled = false;
+              }
+            });
+            card.appendChild(endButton);
+          }
 
           const deleteButton = document.createElement('button');
           deleteButton.className = 'danger';
